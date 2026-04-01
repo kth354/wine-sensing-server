@@ -12,9 +12,8 @@ client = AsyncIOMotorClient(MONGO_URL)
 db = client.sensing_project
 
 class WineSensingLog(BaseModel):
-    sensor_mac: str
+    sensor_id: str
     temperature: float
-    fall_detected: float
     humidity: float
     battery: int
 
@@ -35,9 +34,9 @@ async def create_log(log: WineSensingLog):
     new_log = await db.logs.insert_one(log.model_dump())
     return {"status": "success", "id": str(new_log.inserted_id)}
 
-@app.get("/api/sensors/{sensor_mac}")
-async def get_log(sensor_mac:str):
-    cursor = db.logs.find({"sensor_mac": sensor_mac}).sort("timestamp", -1).limit(50)
+@app.get("/api/sensors/{sensor_id}")
+async def get_log(sensor_id:str):
+    cursor = db.logs.find({"sensor_id": sensor_id}).sort("timestamp", -1).limit(50)
 
     logs= await cursor.to_list(length=50)
 
@@ -49,7 +48,7 @@ async def get_log(sensor_mac:str):
 
     return {
         "status": "success",
-        "sensor_mac": sensor_mac,
+        "sensor_id": sensor_id,
         "count": len(logs),
         "data": logs
     }
