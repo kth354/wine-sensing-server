@@ -37,18 +37,40 @@ async def create_log(log: WineSensingLog):
 @app.get("/api/sensors/{sensor_id}")
 async def get_log(sensor_id:str):
     cursor = db.logs.find({"sensor_id": sensor_id}).sort("timestamp", -1).limit(50)
-
     logs= await cursor.to_list(length=50)
 
     if not logs:
-        raise HTTPException(status_code=404, detail="Log not found")
+        raise HTTPException(status_code=404, detail="로그를 찾을 수 없습니다.")
 
-    for log in logs:
+    chronological_logs = logs[::-1]
+
+    consecutive_24_count = 0
+    consecutive_29_count = 0
+    final_grade = "A"
+
+    for log in chronological_logs:
         log["_id"] = str(log["_id"])
+        temp = log["temperature"]
+
+        if temp >= 29.0:
+            consecutive_29_count += 1
+        else:
+            consecutive_29_count = 0
+
+        if temp >= 24.0:
+            consecutive_24_count += 1
+        else:
+            consecutive_24_count = 0
+
+        if consecutive_29_count >= 3:
+            final_grade = "C"
+        elif consecutive_24_count >= 3 and final_grade == "A":
+            final_grade = "B"
 
     return {
         "status": "success",
         "sensor_id": sensor_id,
         "count": len(logs),
+        "quality_grade": final_grade,
         "data": logs
     }
