@@ -1,5 +1,7 @@
 import os
 from contextlib import asynccontextmanager
+from re import match
+
 from fastapi import FastAPI, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
@@ -121,3 +123,85 @@ async def get_wines(
         "returned_count": len(wines),
         "data": wines
     }
+
+@app.get("/api/wines/ranking")
+async def get_wines_ranking():
+    cursor = db.wine_info.find().sort("view_count",-1).limit(10)
+    wines = await cursor.to_list(length=10)
+
+    top_wines = []
+    for wine in wines:
+        wine["_id"] = str(wine["_id"])
+        wine_nm = wine.get("WINE_NM", "")
+        safe_name = urllib.parse.quote(wine_nm)
+        wine["image_url"] = f"{S3_BASE_URL}/{safe_name}.png"
+        top_wines.append(wine)
+
+
+    return {"status": "success",
+            "returned_count": len(top_wines),
+            "data": top_wines
+            }
+
+class ViewLog(BaseModel):
+    user_id: str
+    wine_nm: str
+    category: str
+
+@app.post("/api/wines/user_view")
+async def save_view_log(log: ViewLog):
+    log_data = log.model_dump()
+
+    log_data["viewed_at"] = datetime.now(timezone.utc)
+
+    result = await db.user_view.insert_one(log_data)
+
+    await db.wine_info.update_one(
+        {"WINE_NM": log.wine_nm},
+        {"$inc": {"view_count": 1}}
+    )
+    return{
+        "status": "success",
+        "log_id": str(result.inserted_id)
+    }
+
+@app.get("/api/wines/recommend/{user_id}")
+async def get_recommend(user_id: str):
+    pipeline = [
+        {"$match": {"user_id": user_id}},
+        {"$group": {"_id": "$category", "view_count": {"$sum": 1}}},
+        {"$sort": {"view_count": -1}},
+        {"$limit": 10},
+    ]
+
+    cursor =db.user_view.aggregate(pipeline)
+    top_category_result= await cursor.to_list(length=10)
+
+    if not top_category_result:
+        return{
+            "status": "success",
+            "message": "아직 와인 추천이 어려워요",
+            "recommendations":[]
+        }
+
+    best_category = top_category_result[0]["_id"]
+
+    recommended_cursor = db.wine_info.find(
+        {"WINE_CTGRY": best_category}
+    ).sort("view_count", -1).limit(5)
+
+    final_wines = await recommended_cursor.to_list(length=5)
+
+    for wine in final_wines:
+        wine["_id"] = str(wine["_id"])
+        wine_nm = wine.get("WINE_NM", "")
+        safe_name = urllib.parse.quote(wine_nm)
+        wine["image_url"] = f"{S3_BASE_URL}/{safe_name}.png"
+
+    return{
+        "status": "success",
+        "user_id": user_id,
+        "favorite_category": best_category,
+        "recommendations": final_wines
+    }
+
