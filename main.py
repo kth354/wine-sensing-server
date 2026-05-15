@@ -100,6 +100,7 @@ async def get_wines(
         query = {
             "$or":[
                 {"WINE_NM" : {"$regex": search, "$options":"i"}},
+                {"WINE_NM_KR" : {"$regex": search, "$options":"i"}},
                 {"WINE_CTGRY" : {"$regex": search, "$options":"i"}},
                 { "WINE_AREA_NM" : {"$regex": search, "$options":"i"}}
             ]
