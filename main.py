@@ -91,7 +91,8 @@ async def get_log(sensor_id:str):
 async def get_wines(
         page: int =1,
         limit: int = 10,
-        search: Optional[str] = None
+        search: Optional[str] = None,
+        category: Optional[str] = None
 ):
     skip_count = (page -1) * limit
     query = {}
@@ -102,13 +103,20 @@ async def get_wines(
                 {"WINE_NM" : {"$regex": search, "$options":"i"}},
                 {"WINE_NM_KR" : {"$regex": search, "$options":"i"}},
                 {"WINE_CTGRY" : {"$regex": search, "$options":"i"}},
-                { "WINE_AREA_NM" : {"$regex": search, "$options":"i"}}
+                {"WINE_AREA_NM" : {"$regex": search, "$options":"i"}}
             ]
         }
 
+    if category:
+        query["WINE_CTGRY"] = category
+
     print(f" 현재 DB 검색 조건: {query}")
 
-    cursor = db.wine_info.find(query).skip(skip_count).limit(limit)
+    cursor = db.wine_info.find(query).sort("view_count", - 1).skip(skip_count).limit(limit)
+    print(f"내림차순 적용")
+
+    cursor = cursor.skip(skip_count).limit(limit)
+
     wines = await cursor.to_list(length=limit)
 
     for wine in wines:
